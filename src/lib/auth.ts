@@ -1,0 +1,18 @@
+import { betterAuth } from "better-auth";
+import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import db from "../db/connection";
+import * as schema from "../db/schema";
+
+export const auth = betterAuth({
+  database: drizzleAdapter(db, {
+    provider: "pg",
+    schema: schema,
+  }),
+
+  emailAndPassword: {
+    enabled: true,
+    normalizeEmail: true,
+  },
+
+  trustedOrigins: ["http://localhost:3000", "http://localhost:5173"],
+});

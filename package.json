@@ -1,0 +1,49 @@
+{
+  "name": "backend",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "start": "ts-node-dev --respawn src/server.ts",
+    "db:generate": "drizzle-kit generate:pg",
+    "db:migrate": "drizzle-kit push:pg",
+    "db:studio": "drizzle-kit studio",
+    "seed": "ts-node src/db/seed.ts",
+    "introspect": "ts-node src/db/introspect.ts",
+    "build": "tsc",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@types/cookie-parser": "^1.4.8",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
+    "@types/express-session": "^1.18.1",
+    "@types/multer": "^1.4.12",
+    "@types/node": "^20.10.0",
+    "better-auth": "latest",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "drizzle-orm": "^0.40.0",
+    "express": "^4.21.2",
+    "express-session": "^1.18.1",
+    "flowbite-svelte": "^0.48.4",
+    "fs": "0.0.1-security",
+    "multer": "1.4.5-lts.1",
+    "path": "^0.12.7",
+    "pg": "^8.13.3",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^5.8.2",
+    "uuid": "^11.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@types/pg": "^8.11.11",
+    "drizzle-kit": "^0.30.5",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.8.2"
+  }
+}
