@@ -6,14 +6,7 @@ import fs from "fs";
 import multer from "multer";
 import db from "./db/connection";
 import { SessionData } from "express-session";
-import {
-  cart,
-  cartItems,
-  games,
-  payments,
-  sales,
-  user as users,
-} from "./db/schema";
+import { user as users } from "./db/schema";
 import { auth } from "./lib/auth";
 import { toNodeHandler, fromNodeHeaders } from "better-auth/node";
 import cookieParser from "cookie-parser";
@@ -105,38 +98,6 @@ const requireAuth = async (
 
 app.all("/api/auth/*", toNodeHandler(auth));
 app.use(express.json());
-
-app.get("/api/history", requireAuth, async (req, res) => {
-  try {
-    const userId = (req as any).authSession.user.id;
-    const type = req.query.type as string | undefined;
-
-    let whereClause;
-    if (type === "bought") {
-      whereClause = eq(sales.buyerId, userId);
-    } else if (type === "sold") {
-      whereClause = eq(sales.sellerId, userId);
-    } else {
-      whereClause = or(eq(sales.buyerId, userId), eq(sales.sellerId, userId));
-    }
-
-    const userSales = await db
-      .select({
-        saleId: sales.id,
-        buyerId: sales.buyerId,
-        sellerId: sales.sellerId,
-        gameDetails: games,
-        createdAt: sales.createdAt,
-      })
-      .from(sales)
-      .leftJoin(games, eq(sales.itemId, games.id))
-      .where(whereClause);
-
-    res.json(userSales);
-  } catch (error) {
-    res.status(500).json({ error: `${error}` });
-  }
-});
 
 app.use(
   (
