@@ -5,13 +5,13 @@ import path from "path";
 import fs from "fs";
 import multer from "multer";
 import db from "./db/connection";
-import { SessionData } from "express-session";
 import { user as users } from "./db/schema";
 import { auth } from "./lib/auth";
 import { toNodeHandler, fromNodeHeaders } from "better-auth/node";
 import cookieParser from "cookie-parser";
-import { and, count, eq, or } from "drizzle-orm";
-
+import { eq } from "drizzle-orm";
+import deliveryRoutes from "./routes/deliveries";
+import { businessProfile } from "./db/schema";
 dotenv.config();
 
 const app = express();
@@ -21,11 +21,9 @@ const BACKEND_URL = process.env.BACKEND_URL || `http://localhost:${PORT}`;
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     const uploadDir = path.join(__dirname, "public", "uploads");
-
     if (!fs.existsSync(uploadDir)) {
       fs.mkdirSync(uploadDir, { recursive: true });
     }
-
     cb(null, uploadDir);
   },
   filename: (req, file, cb) => {
@@ -81,12 +79,10 @@ const requireAuth = async (
     const session = await auth.api.getSession({
       headers: fromNodeHeaders(req.headers),
     });
-
     if (!session?.user) {
       res.status(401).json({ error: "Unauthorized" });
       return;
     }
-
     (req as any).authSession = session;
     next();
   } catch (error) {
@@ -98,6 +94,73 @@ const requireAuth = async (
 
 app.all("/api/auth/*", toNodeHandler(auth));
 app.use(express.json());
+app.use("/api/deliveries", requireAuth, deliveryRoutes);
+
+app.post("/api/set-role", requireAuth, async (req, res) => {
+  try {
+    const session = (req as any).authSession;
+    const { role } = req.body;
+
+    if (!["driver", "business"].includes(role)) {
+      res.status(400).json({ error: "Invalid role" });
+      return;
+    }
+
+    await db.update(users).set({ role }).where(eq(users.id, session.user.id));
+
+    res.json({ ok: true });
+  } catch (error) {
+    console.error("Set role error:", error);
+    res.status(500).json({ error: "Failed to set role" });
+  }
+});
+app.get("/api/business-profile", requireAuth, async (req, res) => {
+  const session = (req as any).authSession;
+  const [profile] = await db
+    .select()
+    .from(businessProfile)
+    .where(eq(businessProfile.userId, session.user.id));
+  res.json(profile ?? null);
+});
+app.get("/api/places/autocomplete", requireAuth, async (req, res) => {
+  const { input } = req.query;
+  if (!input) {
+    res.status(400).json({ error: "Missing input" });
+    return;
+  }
+  const r = await fetch(
+    "https://places.googleapis.com/v1/places:autocomplete",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": process.env.GOOGLE_PLACES_API_KEY!,
+      },
+      body: JSON.stringify({ input }),
+    },
+  );
+  const data = await r.json();
+  res.json(data);
+});
+
+app.get("/api/places/details", requireAuth, async (req, res) => {
+  const { placeId } = req.query;
+  if (!placeId) {
+    res.status(400).json({ error: "Missing placeId" });
+    return;
+  }
+  const r = await fetch(
+    `https://places.googleapis.com/v1/places/${placeId}?fields=location,formattedAddress`,
+    {
+      headers: {
+        "X-Goog-Api-Key": process.env.GOOGLE_PLACES_API_KEY!,
+        "X-Goog-FieldMask": "location,formattedAddress",
+      },
+    },
+  );
+  const data = await r.json();
+  res.json(data);
+});
 
 app.use(
   (
