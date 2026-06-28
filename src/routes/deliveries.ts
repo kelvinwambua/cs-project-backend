@@ -1,8 +1,8 @@
 import express from "express";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import db from "../db/connection";
-import { delivery, businessProfile } from "../db/schema";
+import { delivery, businessProfile, deliveryLocation } from "../db/schema";
 
 const router = express.Router();
 
@@ -184,6 +184,24 @@ router.post("/preview", async (req, res) => {
   });
 });
 
+// returns all delivery requests that are available
+router.get("/available-deliveries", async (req, res) => {
+  const session = (req as any).authSession;
+  if (session.user.role !== "driver") {
+    res
+      .status(403)
+      .json({ error: "Only drivers can see available deliveries" });
+    return;
+  }
+  const available_deliveries = await db
+    .select()
+    .from(delivery)
+    .where(eq(delivery.status, "pending"))
+    .orderBy(desc(delivery.createdAt));
+  res.json(available_deliveries);
+  return;
+});
+
 router.get("/:id", async (req, res) => {
   const session = (req as any).authSession;
   const { id } = req.params;
@@ -200,6 +218,134 @@ router.get("/:id", async (req, res) => {
     return;
   }
   res.json(found);
+});
+
+// update a delivery request
+router.patch("/:id", async (req, res) => {
+  const session = (req as any).authSession;
+  const { id } = req.params;
+  const { action } = req.body;
+  switch (action) {
+    // accept a delivery
+    case "accept":
+      const accepted = await db
+        .update(delivery)
+        .set({
+          driverId: session.user.id,
+          status: "accepted",
+          updatedAt: new Date(),
+        })
+        .where(and(eq(delivery.id, id), eq(delivery.status, "pending")))
+        .returning();
+      if (accepted.length === 0) {
+        return res.status(409).json({
+          error: "Delivery is no longer pending",
+        });
+      }
+      return res.json(accepted[0]);
+
+    // mark as picked_up
+    case "pick_up":
+      const picked = await db
+        .update(delivery)
+        .set({
+          status: "picked_up",
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(delivery.id, id),
+            eq(delivery.driverId, session.user.id),
+            eq(delivery.status, "accepted"),
+          ),
+        )
+        .returning();
+      if (picked.length === 0) {
+        return res.status(409).json({ error: "Delivery not accepted" });
+      }
+
+      return res.json(picked[0]);
+
+    case "deliver":
+      // mark as delivered
+      const delivered = await db
+        .update(delivery)
+        .set({
+          status: "delivered",
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(delivery.id, id),
+            eq(delivery.driverId, session.user.id),
+            eq(delivery.status, "picked_up"),
+          ),
+        )
+        .returning();
+      if (delivered.length === 0) {
+        return res.status(409).json({ error: "Delivery not picked up" });
+      }
+      return res.json(delivered[0]);
+
+    case "cancel":
+      // cancel a request (for businesses only)
+      if (session.user.role !== "business") {
+        return res
+          .status(403)
+          .json({ error: "Only businesses can cancel orders" });
+      }
+      const cancelled = await db
+        .update(delivery)
+        .set({
+          status: "cancelled",
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(delivery.id, id),
+            eq(delivery.status, "pending"),
+            eq(delivery.businessId, session.user.id),
+          ),
+        )
+        .returning();
+      if (cancelled.length === 0) {
+        return res.status(409).json({ error: "Delivery cancellation failed" });
+      }
+      return res.json(cancelled[0]);
+    default:
+      return res.status(400).json({
+        error: "Invalid action",
+      });
+  }
+});
+
+router.patch("/:id/location", async (req, res) => {
+  const { id: deliveryId } = req.params;
+  const session = (req as any).authSession;
+  const { latitude, longitude } = req.body;
+  const driverId = session.user.id;
+  const recordedAt = new Date();
+  await db
+    .insert(deliveryLocation)
+    .values({
+      id: crypto.randomUUID(),
+      deliveryId,
+      driverId,
+      lat: latitude,
+      lng: longitude,
+      recordedAt: recordedAt,
+    })
+    .onConflictDoUpdate({
+      target: deliveryLocation.deliveryId,
+      set: {
+        lat: latitude,
+        lng: longitude,
+        recordedAt: recordedAt,
+      },
+    });
+  res.json({
+    success: true,
+  });
 });
 
 export default router;

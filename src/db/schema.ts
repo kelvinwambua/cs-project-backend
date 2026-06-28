@@ -158,6 +158,7 @@ export const delivery = pgTable("delivery", {
 export const deliveryLocation = pgTable("delivery_location", {
   id: text("id").primaryKey(),
   deliveryId: text("delivery_id")
+    .unique()
     .notNull()
     .references(() => delivery.id, { onDelete: "cascade" }),
   driverId: text("driver_id")

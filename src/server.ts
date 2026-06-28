@@ -11,6 +11,7 @@ import { toNodeHandler, fromNodeHeaders } from "better-auth/node";
 import cookieParser from "cookie-parser";
 import { eq } from "drizzle-orm";
 import deliveryRoutes from "./routes/deliveries";
+
 import { businessProfile } from "./db/schema";
 dotenv.config();
 
@@ -55,10 +56,18 @@ app.use(
   cors({
     origin: "http://localhost:5173",
     credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE"],
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
   }),
 );
+
+// logging
+app.use((req, res, next) => {
+  res.on("finish", () => {
+    console.log(`${req.method} ${req.originalUrl} -> ${res.statusCode}`);
+  });
+  next();
+});
 
 app.use(
   "/uploads",

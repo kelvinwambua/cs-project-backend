@@ -4,8 +4,8 @@
   "main": "index.js",
   "scripts": {
     "start": "ts-node-dev --respawn src/server.ts",
-    "db:generate": "drizzle-kit generate:pg",
-    "db:migrate": "drizzle-kit push:pg",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "seed": "ts-node src/db/seed.ts",
     "introspect": "ts-node src/db/introspect.ts",
@@ -24,15 +24,16 @@
     "@types/express-session": "^1.18.1",
     "@types/multer": "^1.4.12",
     "@types/node": "^20.10.0",
-    "better-auth": "latest",
+    "better-auth": "^1.6.18",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
-    "drizzle-orm": "^0.40.0",
+    "drizzle-orm": "^0.45.2",
     "express": "^4.21.2",
     "express-session": "^1.18.1",
     "flowbite-svelte": "^0.48.4",
     "fs": "0.0.1-security",
+    "geolocation": "^0.2.0",
     "multer": "1.4.5-lts.1",
     "nanoid": "^5.1.11",
     "path": "^0.12.7",
@@ -45,7 +46,7 @@
   "devDependencies": {
     "@types/node": "^20.10.0",
     "@types/pg": "^8.11.11",
-    "drizzle-kit": "^0.30.5",
+    "drizzle-kit": "^0.31.10",
     "ts-node": "^10.9.2",
     "typescript": "^5.8.2"
   }
