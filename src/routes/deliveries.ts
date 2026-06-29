@@ -236,6 +236,26 @@ router.get("/active", async (req, res) => {
   res.json(activeDelivery);
 });
 
+// driver's own completed/cancelled deliveries
+router.get("/history", async (req, res) => {
+  const session = (req as any).authSession;
+  if (session.user.role !== "driver") {
+    res.status(403).json({ error: "Only drivers can view delivery history" });
+    return;
+  }
+  const history = await db
+    .select()
+    .from(delivery)
+    .where(
+      and(
+        eq(delivery.driverId, session.user.id),
+        or(eq(delivery.status, "delivered"), eq(delivery.status, "cancelled")),
+      ),
+    )
+    .orderBy(desc(delivery.updatedAt));
+  res.json(history);
+});
+
 router.get("/:id", async (req, res) => {
   const session = (req as any).authSession;
   const { id } = req.params;
@@ -399,6 +419,52 @@ router.patch("/:id/location", async (req, res) => {
     });
   res.json({
     success: true,
+  });
+});
+
+router.get("/:id/location", async (req, res) => {
+  const session = (req as any).authSession;
+  const { id } = req.params;
+
+  // Find the delivery
+  const [found] = await db.select().from(delivery).where(eq(delivery.id, id));
+
+  if (!found) {
+    return res.status(404).json({
+      error: "Delivery not found",
+    });
+  }
+
+  // Authorisation
+  if (
+    session.user.role === "business" &&
+    found.businessId !== session.user.id
+  ) {
+    return res.status(403).json({
+      error: "Forbidden",
+    });
+  }
+
+  if (session.user.role === "driver" && found.driverId !== session.user.id) {
+    return res.status(403).json({
+      error: "Forbidden",
+    });
+  }
+
+  const [location] = await db
+    .select()
+    .from(deliveryLocation)
+    .where(eq(deliveryLocation.deliveryId, id));
+
+  if (!location) {
+    return res.status(404).json({
+      error: "Driver location unavailable",
+    });
+  }
+
+  res.json({
+    delivery: found,
+    location,
   });
 });
 
