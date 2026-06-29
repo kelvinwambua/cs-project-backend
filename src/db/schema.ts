@@ -178,6 +178,8 @@ export const delivery = pgTable("delivery", {
   status: deliveryStatusEnum("status").default("pending").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  otpHash: text("otp_hash"),
+  otpExpiresAt: timestamp("otp_expires_at"),
 });
 
 export const deliveryLocation = pgTable("delivery_location", {

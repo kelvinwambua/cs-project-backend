@@ -3,6 +3,7 @@ import { eq, desc, and, or } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import db from "../db/connection";
 import { delivery, businessProfile, deliveryLocation } from "../db/schema";
+import crypto from "crypto";
 
 const router = express.Router();
 
@@ -175,6 +176,72 @@ router.post("/", async (req, res) => {
   res.status(201).json(newDelivery[0]);
 });
 
+const OTP_TTL_MS = 5 * 60 * 1000;
+
+function generateOtp(): string {
+  return String(crypto.randomInt(100000, 999999));
+}
+
+function hashOtp(otp: string): string {
+  return crypto.createHash("sha256").update(otp).digest("hex");
+}
+
+// Normalise any Kenyan number to E.164 without the leading +
+// Meta's API wants the number without "+", e.g. 254712345678
+function toMetaPhone(phone: string): string {
+  const digits = phone.replace(/\D/g, "");
+  if (digits.startsWith("254")) return digits;
+  if (digits.startsWith("0")) return `254${digits.slice(1)}`;
+  return digits;
+}
+async function sendWhatsAppOtp(
+  recipientPhone: string,
+  recipientName: string,
+  otp: string,
+): Promise<void> {
+  const phoneId = process.env.META_WHATSAPP_PHONE_ID!;
+  const token = process.env.META_WHATSAPP_TOKEN!;
+  const templateName =
+    process.env.META_WHATSAPP_TEMPLATE_NAME ?? "delivery_otp";
+
+  const url = `https://graph.facebook.com/v19.0/${phoneId}/messages`;
+
+  const body = {
+    messaging_product: "whatsapp",
+    to: toMetaPhone(recipientPhone),
+    type: "template",
+    template: {
+      name: templateName,
+      language: { code: "en_US" },
+      components: [
+        {
+          type: "body",
+          parameters: [
+            { type: "text", text: recipientName },
+            { type: "text", text: otp },
+          ],
+        },
+      ],
+    },
+  };
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(
+      `Meta WhatsApp API error ${res.status}: ${JSON.stringify(err)}`,
+    );
+  }
+}
+
 router.get("/", async (req, res) => {
   const session = (req as any).authSession;
   if (session.user.role === "business") {
@@ -280,6 +347,123 @@ router.get("/history", async (req, res) => {
     )
     .orderBy(desc(delivery.updatedAt));
   res.json(history);
+});
+
+router.post("/:id/otp", async (req, res) => {
+  const session = (req as any).authSession;
+
+  if (session.user.role !== "driver") {
+    return res.status(403).json({ error: "Only drivers can request an OTP." });
+  }
+
+  const { id } = req.params;
+
+  const [found] = await db.select().from(delivery).where(eq(delivery.id, id));
+
+  if (!found) {
+    return res.status(404).json({ error: "Delivery not found." });
+  }
+
+  if (found.driverId !== session.user.id) {
+    return res.status(403).json({ error: "Forbidden." });
+  }
+
+  if (found.status !== "picked_up") {
+    return res.status(409).json({
+      error: "OTP can only be sent once the parcel has been picked up.",
+    });
+  }
+
+  const otp = generateOtp();
+  const otpHash = hashOtp(otp);
+  const otpExpiresAt = new Date(Date.now() + OTP_TTL_MS);
+
+  await db
+    .update(delivery)
+    .set({ otpHash, otpExpiresAt, updatedAt: new Date() })
+    .where(eq(delivery.id, id));
+
+  const phone = toMetaPhone(found.recipientPhone);
+
+  try {
+    await sendWhatsAppOtp(found.recipientPhone, found.recipientName, otp);
+  } catch (waErr) {
+    console.error("WhatsApp send error:", waErr);
+    return res.status(502).json({
+      error: "Could not send WhatsApp message. Please try again.",
+    });
+  }
+
+  return res.json({
+    success: true,
+    message: `WhatsApp sent to recipient's number ending in ${phone.slice(-4)}.`,
+    expiresAt: otpExpiresAt,
+  });
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/deliveries/:id/verify-otp
+// Driver submits the OTP the customer read out to them.
+// If valid, marks the delivery as "delivered".
+// ---------------------------------------------------------------------------
+router.post("/:id/verify-otp", async (req, res) => {
+  const session = (req as any).authSession;
+
+  if (session.user.role !== "driver") {
+    return res.status(403).json({ error: "Only drivers can verify an OTP." });
+  }
+
+  const { id } = req.params;
+  const { otp } = req.body;
+
+  if (!otp || typeof otp !== "string") {
+    return res.status(400).json({ error: "OTP is required." });
+  }
+
+  const [found] = await db.select().from(delivery).where(eq(delivery.id, id));
+
+  if (!found) {
+    return res.status(404).json({ error: "Delivery not found." });
+  }
+
+  if (found.driverId !== session.user.id) {
+    return res.status(403).json({ error: "Forbidden." });
+  }
+
+  if (found.status !== "picked_up") {
+    return res.status(409).json({
+      error: "Delivery is not in a verifiable state.",
+    });
+  }
+
+  if (!found.otpHash || !found.otpExpiresAt) {
+    return res.status(409).json({
+      error: "No OTP has been issued for this delivery. Request one first.",
+    });
+  }
+
+  if (new Date() > new Date(found.otpExpiresAt)) {
+    return res.status(410).json({
+      error: "OTP has expired. Please request a new one.",
+    });
+  }
+
+  if (hashOtp(otp.trim()) !== found.otpHash) {
+    return res.status(422).json({ error: "Incorrect OTP." });
+  }
+
+  const [delivered] = await db
+    .update(delivery)
+    .set({
+      status: "delivered",
+      otpHash: null,
+      otpExpiresAt: null,
+      updatedAt: new Date(),
+    })
+    .where(eq(delivery.id, id))
+    .returning();
+
+  return res.json(delivered);
 });
 
 router.get("/:id", async (req, res) => {
