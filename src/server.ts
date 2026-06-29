@@ -11,8 +11,9 @@ import { toNodeHandler, fromNodeHeaders } from "better-auth/node";
 import cookieParser from "cookie-parser";
 import { eq } from "drizzle-orm";
 import deliveryRoutes from "./routes/deliveries";
-
+import analyticsRoutes from "./routes/analytics";
 import { businessProfile } from "./db/schema";
+
 dotenv.config();
 
 const app = express();
@@ -38,9 +39,7 @@ const storage = multer.diskStorage({
 
 const upload = multer({
   storage: storage,
-  limits: {
-    fileSize: 5 * 1024 * 1024,
-  },
+  limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     const allowedTypes = ["image/jpeg", "image/png", "image/gif", "image/webp"];
     if (allowedTypes.includes(file.mimetype)) {
@@ -61,7 +60,6 @@ app.use(
   }),
 );
 
-// logging
 app.use((req, res, next) => {
   res.on("finish", () => {
     console.log(`${req.method} ${req.originalUrl} -> ${res.statusCode}`);
@@ -104,25 +102,24 @@ const requireAuth = async (
 app.all("/api/auth/*", toNodeHandler(auth));
 app.use(express.json());
 app.use("/api/deliveries", requireAuth, deliveryRoutes);
+app.use("/api/analytics", requireAuth, analyticsRoutes);
 
 app.post("/api/set-role", requireAuth, async (req, res) => {
   try {
     const session = (req as any).authSession;
     const { role } = req.body;
-
     if (!["driver", "business"].includes(role)) {
       res.status(400).json({ error: "Invalid role" });
       return;
     }
-
     await db.update(users).set({ role }).where(eq(users.id, session.user.id));
-
     res.json({ ok: true });
   } catch (error) {
     console.error("Set role error:", error);
     res.status(500).json({ error: "Failed to set role" });
   }
 });
+
 app.get("/api/business-profile", requireAuth, async (req, res) => {
   const session = (req as any).authSession;
   const [profile] = await db
@@ -131,6 +128,7 @@ app.get("/api/business-profile", requireAuth, async (req, res) => {
     .where(eq(businessProfile.userId, session.user.id));
   res.json(profile ?? null);
 });
+
 app.get("/api/places/autocomplete", requireAuth, async (req, res) => {
   const { input } = req.query;
   if (!input) {
@@ -170,6 +168,7 @@ app.get("/api/places/details", requireAuth, async (req, res) => {
   const data = await r.json();
   res.json(data);
 });
+
 app.patch("/api/profile", requireAuth, async (req, res) => {
   const session = (req as any).authSession;
   const { name } = req.body;
@@ -193,10 +192,9 @@ app.use(
     next: express.NextFunction,
   ) => {
     console.error(err.stack);
-    res.status(500).json({
-      error: "Something went wrong!",
-      message: err.message,
-    });
+    res
+      .status(500)
+      .json({ error: "Something went wrong!", message: err.message });
   },
 );
 

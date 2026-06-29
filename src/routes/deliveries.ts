@@ -186,14 +186,13 @@ function hashOtp(otp: string): string {
   return crypto.createHash("sha256").update(otp).digest("hex");
 }
 
-// Normalise any Kenyan number to E.164 without the leading +
-// Meta's API wants the number without "+", e.g. 254712345678
 function toMetaPhone(phone: string): string {
   const digits = phone.replace(/\D/g, "");
   if (digits.startsWith("254")) return digits;
   if (digits.startsWith("0")) return `254${digits.slice(1)}`;
   return digits;
 }
+
 async function sendWhatsAppOtp(
   recipientPhone: string,
   recipientName: string,
@@ -401,11 +400,6 @@ router.post("/:id/otp", async (req, res) => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// POST /api/deliveries/:id/verify-otp
-// Driver submits the OTP the customer read out to them.
-// If valid, marks the delivery as "delivered".
-// ---------------------------------------------------------------------------
 router.post("/:id/verify-otp", async (req, res) => {
   const session = (req as any).authSession;
 
