@@ -304,14 +304,15 @@ router.patch("/:id", async (req, res) => {
   const session = (req as any).authSession;
   const { id } = req.params;
   const { action } = req.body;
+
   switch (action) {
-    case "accept":
+    case "accept": {
       const active = await db
         .select()
         .from(delivery)
         .where(
           and(
-            eq(delivery.driverId, id),
+            eq(delivery.driverId, session.user.id),
             or(
               eq(delivery.status, "accepted"),
               eq(delivery.status, "picked_up"),
@@ -325,6 +326,7 @@ router.patch("/:id", async (req, res) => {
           error: "Driver already has an active delivery.",
         });
       }
+
       const accepted = await db
         .update(delivery)
         .set({
@@ -334,20 +336,17 @@ router.patch("/:id", async (req, res) => {
         })
         .where(and(eq(delivery.id, id), eq(delivery.status, "pending")))
         .returning();
+
       if (accepted.length === 0) {
-        return res.status(409).json({
-          error: "Delivery is no longer pending",
-        });
+        return res.status(409).json({ error: "Delivery is no longer pending" });
       }
       return res.json(accepted[0]);
+    }
 
-    case "pick_up":
+    case "pick_up": {
       const picked = await db
         .update(delivery)
-        .set({
-          status: "picked_up",
-          updatedAt: new Date(),
-        })
+        .set({ status: "picked_up", updatedAt: new Date() })
         .where(
           and(
             eq(delivery.id, id),
@@ -356,18 +355,17 @@ router.patch("/:id", async (req, res) => {
           ),
         )
         .returning();
+
       if (picked.length === 0) {
         return res.status(409).json({ error: "Delivery not accepted" });
       }
       return res.json(picked[0]);
+    }
 
-    case "deliver":
+    case "deliver": {
       const delivered = await db
         .update(delivery)
-        .set({
-          status: "delivered",
-          updatedAt: new Date(),
-        })
+        .set({ status: "delivered", updatedAt: new Date() })
         .where(
           and(
             eq(delivery.id, id),
@@ -376,23 +374,23 @@ router.patch("/:id", async (req, res) => {
           ),
         )
         .returning();
+
       if (delivered.length === 0) {
         return res.status(409).json({ error: "Delivery not picked up" });
       }
       return res.json(delivered[0]);
+    }
 
-    case "cancel":
+    case "cancel": {
       if (session.user.role !== "business") {
         return res
           .status(403)
           .json({ error: "Only businesses can cancel orders" });
       }
+
       const cancelled = await db
         .update(delivery)
-        .set({
-          status: "cancelled",
-          updatedAt: new Date(),
-        })
+        .set({ status: "cancelled", updatedAt: new Date() })
         .where(
           and(
             eq(delivery.id, id),
@@ -401,14 +399,15 @@ router.patch("/:id", async (req, res) => {
           ),
         )
         .returning();
+
       if (cancelled.length === 0) {
         return res.status(409).json({ error: "Delivery cancellation failed" });
       }
       return res.json(cancelled[0]);
+    }
+
     default:
-      return res.status(400).json({
-        error: "Invalid action",
-      });
+      return res.status(400).json({ error: "Invalid action" });
   }
 });
 
