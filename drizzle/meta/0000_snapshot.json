@@ -1,5 +1,5 @@
 {
-  "id": "610d67ca-86af-4165-bd57-232cdd9495fe",
+  "id": "b40dddb0-3e42-4011-971c-1ef5a28d7f33",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -166,6 +166,37 @@
           "primaryKey": false,
           "notNull": false
         },
+        "building": {
+          "name": "building",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "neighborhood": {
+          "name": "neighborhood",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "city": {
+          "name": "city",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "location_type": {
+          "name": "location_type",
+          "type": "location_type",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "location_note": {
+          "name": "location_note",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "lat": {
           "name": "lat",
           "type": "double precision",
@@ -269,6 +300,37 @@
           "primaryKey": false,
           "notNull": true
         },
+        "pickup_building": {
+          "name": "pickup_building",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "pickup_neighborhood": {
+          "name": "pickup_neighborhood",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "pickup_city": {
+          "name": "pickup_city",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "pickup_location_type": {
+          "name": "pickup_location_type",
+          "type": "location_type",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "pickup_location_note": {
+          "name": "pickup_location_note",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "pickup_lat": {
           "name": "pickup_lat",
           "type": "double precision",
@@ -292,6 +354,37 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true
+        },
+        "dropoff_building": {
+          "name": "dropoff_building",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "dropoff_neighborhood": {
+          "name": "dropoff_neighborhood",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "dropoff_city": {
+          "name": "dropoff_city",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "dropoff_location_type": {
+          "name": "dropoff_location_type",
+          "type": "location_type",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "dropoff_location_note": {
+          "name": "dropoff_location_note",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
         },
         "dropoff_lat": {
           "name": "dropoff_lat",
@@ -459,7 +552,15 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
+      "uniqueConstraints": {
+        "delivery_location_delivery_id_unique": {
+          "name": "delivery_location_delivery_id_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "delivery_id"
+          ]
+        }
+      },
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
@@ -782,6 +883,15 @@
         "picked_up",
         "delivered",
         "cancelled"
+      ]
+    },
+    "public.location_type": {
+      "name": "location_type",
+      "schema": "public",
+      "values": [
+        "house",
+        "apartment",
+        "office"
       ]
     }
   },

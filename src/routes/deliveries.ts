@@ -66,10 +66,20 @@ router.post("/", async (req, res) => {
     pickupPlaceId,
     pickupLat,
     pickupLng,
+    pickupBuilding,
+    pickupNeighborhood,
+    pickupCity,
+    pickupLocationType,
+    pickupLocationNote,
     dropoffAddress,
     dropoffPlaceId,
     dropoffLat,
     dropoffLng,
+    dropoffBuilding,
+    dropoffNeighborhood,
+    dropoffCity,
+    dropoffLocationType,
+    dropoffLocationNote,
     notes,
   } = req.body;
 
@@ -106,6 +116,11 @@ router.post("/", async (req, res) => {
       businessName: session.user.name,
       address: pickupAddress,
       placeId: pickupPlaceId,
+      building: pickupBuilding ?? null,
+      neighborhood: pickupNeighborhood ?? null,
+      city: pickupCity ?? null,
+      locationType: pickupLocationType ?? null,
+      locationNote: pickupLocationNote ?? null,
       lat: pickupLat,
       lng: pickupLng,
     })
@@ -114,6 +129,11 @@ router.post("/", async (req, res) => {
       set: {
         address: pickupAddress,
         placeId: pickupPlaceId,
+        building: pickupBuilding ?? null,
+        neighborhood: pickupNeighborhood ?? null,
+        city: pickupCity ?? null,
+        locationType: pickupLocationType ?? null,
+        locationNote: pickupLocationNote ?? null,
         lat: pickupLat,
         lng: pickupLng,
       },
@@ -128,10 +148,20 @@ router.post("/", async (req, res) => {
       recipientPhone,
       pickupAddress,
       pickupPlaceId,
+      pickupBuilding: pickupBuilding ?? null,
+      pickupNeighborhood: pickupNeighborhood ?? null,
+      pickupCity: pickupCity ?? null,
+      pickupLocationType: pickupLocationType ?? null,
+      pickupLocationNote: pickupLocationNote ?? null,
       pickupLat,
       pickupLng,
       dropoffAddress,
       dropoffPlaceId,
+      dropoffBuilding: dropoffBuilding ?? null,
+      dropoffNeighborhood: dropoffNeighborhood ?? null,
+      dropoffCity: dropoffCity ?? null,
+      dropoffLocationType: dropoffLocationType ?? null,
+      dropoffLocationNote: dropoffLocationNote ?? null,
       dropoffLat,
       dropoffLng,
       notes: notes ?? null,
@@ -184,7 +214,6 @@ router.post("/preview", async (req, res) => {
   });
 });
 
-// returns all delivery requests that are available
 router.get("/available-deliveries", async (req, res) => {
   const session = (req as any).authSession;
   if (session.user.role !== "driver") {
@@ -202,11 +231,9 @@ router.get("/available-deliveries", async (req, res) => {
   return;
 });
 
-// get active delivery for driver
 router.get("/active", async (req, res) => {
   const session = (req as any).authSession;
 
-  // Only drivers
   if (session.user.role !== "driver") {
     return res.status(403).json({
       error: "Only drivers can access their active delivery.",
@@ -236,7 +263,6 @@ router.get("/active", async (req, res) => {
   res.json(activeDelivery);
 });
 
-// driver's own completed/cancelled deliveries
 router.get("/history", async (req, res) => {
   const session = (req as any).authSession;
   if (session.user.role !== "driver") {
@@ -274,15 +300,12 @@ router.get("/:id", async (req, res) => {
   res.json(found);
 });
 
-// update a delivery request
 router.patch("/:id", async (req, res) => {
   const session = (req as any).authSession;
   const { id } = req.params;
   const { action } = req.body;
   switch (action) {
-    // accept a delivery
     case "accept":
-      // do not accept if driver currently has ongoing delivery
       const active = await db
         .select()
         .from(delivery)
@@ -318,7 +341,6 @@ router.patch("/:id", async (req, res) => {
       }
       return res.json(accepted[0]);
 
-    // mark as picked_up
     case "pick_up":
       const picked = await db
         .update(delivery)
@@ -337,11 +359,9 @@ router.patch("/:id", async (req, res) => {
       if (picked.length === 0) {
         return res.status(409).json({ error: "Delivery not accepted" });
       }
-
       return res.json(picked[0]);
 
     case "deliver":
-      // mark as delivered
       const delivered = await db
         .update(delivery)
         .set({
@@ -362,7 +382,6 @@ router.patch("/:id", async (req, res) => {
       return res.json(delivered[0]);
 
     case "cancel":
-      // cancel a request (for businesses only)
       if (session.user.role !== "business") {
         return res
           .status(403)
@@ -417,38 +436,28 @@ router.patch("/:id/location", async (req, res) => {
         recordedAt: recordedAt,
       },
     });
-  res.json({
-    success: true,
-  });
+  res.json({ success: true });
 });
 
 router.get("/:id/location", async (req, res) => {
   const session = (req as any).authSession;
   const { id } = req.params;
 
-  // Find the delivery
   const [found] = await db.select().from(delivery).where(eq(delivery.id, id));
 
   if (!found) {
-    return res.status(404).json({
-      error: "Delivery not found",
-    });
+    return res.status(404).json({ error: "Delivery not found" });
   }
 
-  // Authorisation
   if (
     session.user.role === "business" &&
     found.businessId !== session.user.id
   ) {
-    return res.status(403).json({
-      error: "Forbidden",
-    });
+    return res.status(403).json({ error: "Forbidden" });
   }
 
   if (session.user.role === "driver" && found.driverId !== session.user.id) {
-    return res.status(403).json({
-      error: "Forbidden",
-    });
+    return res.status(403).json({ error: "Forbidden" });
   }
 
   const [location] = await db
@@ -457,15 +466,10 @@ router.get("/:id/location", async (req, res) => {
     .where(eq(deliveryLocation.deliveryId, id));
 
   if (!location) {
-    return res.status(404).json({
-      error: "Driver location unavailable",
-    });
+    return res.status(404).json({ error: "Driver location unavailable" });
   }
 
-  res.json({
-    delivery: found,
-    location,
-  });
+  res.json({ delivery: found, location });
 });
 
 export default router;

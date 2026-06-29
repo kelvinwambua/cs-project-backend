@@ -2,6 +2,7 @@ import { relations } from "drizzle-orm";
 import { pgTable, text, timestamp, boolean, index } from "drizzle-orm/pg-core";
 import { numeric, doublePrecision } from "drizzle-orm/pg-core";
 import { pgEnum } from "drizzle-orm/pg-core";
+
 export const user = pgTable("user", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
@@ -11,7 +12,7 @@ export const user = pgTable("user", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at")
     .defaultNow()
-    .$onUpdate(() => /* @__PURE__ */ new Date())
+    .$onUpdate(() => new Date())
     .notNull(),
   role: text("role"),
   banned: boolean("banned").default(false),
@@ -27,7 +28,7 @@ export const session = pgTable(
     token: text("token").notNull().unique(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")
-      .$onUpdate(() => /* @__PURE__ */ new Date())
+      .$onUpdate(() => new Date())
       .notNull(),
     ipAddress: text("ip_address"),
     userAgent: text("user_agent"),
@@ -57,7 +58,7 @@ export const account = pgTable(
     password: text("password"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")
-      .$onUpdate(() => /* @__PURE__ */ new Date())
+      .$onUpdate(() => new Date())
       .notNull(),
   },
   (table) => [index("account_userId_idx").on(table.userId)],
@@ -73,7 +74,7 @@ export const verification = pgTable(
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")
       .defaultNow()
-      .$onUpdate(() => /* @__PURE__ */ new Date())
+      .$onUpdate(() => new Date())
       .notNull(),
   },
   (table) => [index("verification_identifier_idx").on(table.identifier)],
@@ -114,6 +115,12 @@ export const deliveryStatusEnum = pgEnum("delivery_status", [
   "cancelled",
 ]);
 
+export const locationTypeEnum = pgEnum("location_type", [
+  "house",
+  "apartment",
+  "office",
+]);
+
 export const businessProfile = pgTable("business_profile", {
   id: text("id").primaryKey(),
   userId: text("user_id")
@@ -124,6 +131,11 @@ export const businessProfile = pgTable("business_profile", {
   phone: text("phone"),
   address: text("address"),
   placeId: text("place_id"),
+  building: text("building"),
+  neighborhood: text("neighborhood"),
+  city: text("city"),
+  locationType: locationTypeEnum("location_type"),
+  locationNote: text("location_note"),
   lat: doublePrecision("lat"),
   lng: doublePrecision("lng"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -138,14 +150,27 @@ export const delivery = pgTable("delivery", {
   driverId: text("driver_id").references(() => user.id),
   recipientName: text("recipient_name").notNull(),
   recipientPhone: text("recipient_phone").notNull(),
+
   pickupAddress: text("pickup_address").notNull(),
   pickupPlaceId: text("pickup_place_id").notNull(),
+  pickupBuilding: text("pickup_building"),
+  pickupNeighborhood: text("pickup_neighborhood"),
+  pickupCity: text("pickup_city"),
+  pickupLocationType: locationTypeEnum("pickup_location_type"),
+  pickupLocationNote: text("pickup_location_note"),
   pickupLat: doublePrecision("pickup_lat").notNull(),
   pickupLng: doublePrecision("pickup_lng").notNull(),
+
   dropoffAddress: text("dropoff_address").notNull(),
   dropoffPlaceId: text("dropoff_place_id").notNull(),
+  dropoffBuilding: text("dropoff_building"),
+  dropoffNeighborhood: text("dropoff_neighborhood"),
+  dropoffCity: text("dropoff_city"),
+  dropoffLocationType: locationTypeEnum("dropoff_location_type"),
+  dropoffLocationNote: text("dropoff_location_note"),
   dropoffLat: doublePrecision("dropoff_lat").notNull(),
   dropoffLng: doublePrecision("dropoff_lng").notNull(),
+
   notes: text("notes"),
   distanceKm: doublePrecision("distance_km").notNull(),
   estimatedMinutes: doublePrecision("estimated_minutes").notNull(),
