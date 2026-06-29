@@ -170,6 +170,20 @@ app.get("/api/places/details", requireAuth, async (req, res) => {
   const data = await r.json();
   res.json(data);
 });
+app.patch("/api/profile", requireAuth, async (req, res) => {
+  const session = (req as any).authSession;
+  const { name } = req.body;
+  if (!name || typeof name !== "string" || !name.trim()) {
+    res.status(400).json({ error: "Name is required" });
+    return;
+  }
+  const [updated] = await db
+    .update(users)
+    .set({ name: name.trim() })
+    .where(eq(users.id, session.user.id))
+    .returning();
+  res.json(updated);
+});
 
 app.use(
   (

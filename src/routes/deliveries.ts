@@ -1,5 +1,5 @@
 import express from "express";
-import { eq, desc, and } from "drizzle-orm";
+import { eq, desc, and, or } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import db from "../db/connection";
 import { delivery, businessProfile, deliveryLocation } from "../db/schema";
@@ -202,6 +202,40 @@ router.get("/available-deliveries", async (req, res) => {
   return;
 });
 
+// get active delivery for driver
+router.get("/active", async (req, res) => {
+  const session = (req as any).authSession;
+
+  // Only drivers
+  if (session.user.role !== "driver") {
+    return res.status(403).json({
+      error: "Only drivers can access their active delivery.",
+    });
+  }
+
+  const [activeDelivery] = await db
+    .select()
+    .from(delivery)
+    .where(
+      and(
+        eq(delivery.driverId, session.user.id),
+        or(
+          eq(delivery.status, "accepted"),
+          eq(delivery.status, "picked_up"),
+          eq(delivery.status, "delivered"),
+        ),
+      ),
+    );
+
+  if (!activeDelivery) {
+    return res.status(404).json({
+      error: "No active delivery found.",
+    });
+  }
+
+  res.json(activeDelivery);
+});
+
 router.get("/:id", async (req, res) => {
   const session = (req as any).authSession;
   const { id } = req.params;
@@ -228,6 +262,26 @@ router.patch("/:id", async (req, res) => {
   switch (action) {
     // accept a delivery
     case "accept":
+      // do not accept if driver currently has ongoing delivery
+      const active = await db
+        .select()
+        .from(delivery)
+        .where(
+          and(
+            eq(delivery.driverId, id),
+            or(
+              eq(delivery.status, "accepted"),
+              eq(delivery.status, "picked_up"),
+              eq(delivery.status, "delivered"),
+            ),
+          ),
+        );
+
+      if (active.length > 0) {
+        return res.status(403).json({
+          error: "Driver already has an active delivery.",
+        });
+      }
       const accepted = await db
         .update(delivery)
         .set({
