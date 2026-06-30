@@ -12,6 +12,7 @@ import cookieParser from "cookie-parser";
 import { eq } from "drizzle-orm";
 import deliveryRoutes from "./routes/deliveries";
 import analyticsRoutes from "./routes/analytics";
+import payoutRoutes from "./routes/payouts";
 import { businessProfile } from "./db/schema";
 
 dotenv.config();
@@ -103,6 +104,7 @@ app.all("/api/auth/*", toNodeHandler(auth));
 app.use(express.json());
 app.use("/api/deliveries", requireAuth, deliveryRoutes);
 app.use("/api/analytics", requireAuth, analyticsRoutes);
+app.use("/api/payouts", requireAuth, payoutRoutes);
 
 app.post("/api/set-role", requireAuth, async (req, res) => {
   try {

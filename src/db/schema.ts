@@ -88,9 +88,13 @@ export const jwks = pgTable("jwks", {
   expiresAt: timestamp("expires_at"),
 });
 
-export const userRelations = relations(user, ({ many }) => ({
+export const userRelations = relations(user, ({ many, one }) => ({
   sessions: many(session),
   accounts: many(account),
+  payoutAccount: one(driverPayoutAccount, {
+    fields: [user.id],
+    references: [driverPayoutAccount.userId],
+  }),
 }));
 
 export const sessionRelations = relations(session, ({ one }) => ({
@@ -198,6 +202,21 @@ export const deliveryLocation = pgTable("delivery_location", {
   recordedAt: timestamp("recorded_at").defaultNow().notNull(),
 });
 
+export const driverPayoutAccount = pgTable("driver_payout_account", {
+  id: text("id").primaryKey(),
+  userId: text("user_id")
+    .notNull()
+    .unique()
+    .references(() => user.id, { onDelete: "cascade" }),
+  bankCode: text("bank_code").notNull(),
+  bankName: text("bank_name"),
+  accountNumber: text("account_number").notNull(),
+  accountName: text("account_name").notNull(),
+  paystackRecipientCode: text("paystack_recipient_code"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
 export const businessProfileRelations = relations(
   businessProfile,
   ({ one }) => ({
@@ -229,6 +248,16 @@ export const deliveryLocationRelations = relations(
     }),
     driver: one(user, {
       fields: [deliveryLocation.driverId],
+      references: [user.id],
+    }),
+  }),
+);
+
+export const driverPayoutAccountRelations = relations(
+  driverPayoutAccount,
+  ({ one }) => ({
+    driver: one(user, {
+      fields: [driverPayoutAccount.userId],
       references: [user.id],
     }),
   }),

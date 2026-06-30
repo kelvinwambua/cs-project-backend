@@ -57,46 +57,6 @@ router.get("/overview", async (req, res) => {
   });
 });
 
-router.get("/business/volume", async (req, res) => {
-  const session = (req as any).authSession;
-  if (session.user.role !== "business") {
-    return res.status(403).json({ error: "Forbidden" });
-  }
-
-  const period = (req.query.period as string) || "daily";
-  const trunc =
-    period === "monthly" ? "month" : period === "weekly" ? "week" : "day";
-
-  const rows = await db
-    .select({
-      period: sql<string>`date_trunc('${sql.raw(trunc)}', ${delivery.createdAt})`,
-      total: count(),
-      delivered: count(
-        sql`CASE WHEN ${delivery.status} = 'delivered' THEN 1 END`,
-      ),
-      cancelled: count(
-        sql`CASE WHEN ${delivery.status} = 'cancelled' THEN 1 END`,
-      ),
-      spend: sum(
-        sql`CASE WHEN ${delivery.status} = 'delivered' THEN ${delivery.price}::numeric END`,
-      ),
-    })
-    .from(delivery)
-    .where(eq(delivery.businessId, session.user.id))
-    .groupBy(sql`date_trunc('${sql.raw(trunc)}', ${delivery.createdAt})`)
-    .orderBy(sql`date_trunc('${sql.raw(trunc)}', ${delivery.createdAt})`);
-
-  return res.json(
-    rows.map((r) => ({
-      period: r.period,
-      total: Number(r.total),
-      delivered: Number(r.delivered),
-      cancelled: Number(r.cancelled),
-      spend: Number(r.spend || 0).toFixed(2),
-    })),
-  );
-});
-
 router.get("/geo", async (req, res) => {
   const session = (req as any).authSession;
   if (session.user.role !== "admin") {
@@ -213,10 +173,11 @@ router.get("/business/volume", async (req, res) => {
   const period = (req.query.period as string) || "daily";
   const trunc =
     period === "monthly" ? "month" : period === "weekly" ? "week" : "day";
+  const truncLit = sql.raw(`'${trunc}'`);
 
   const rows = await db
     .select({
-      period: sql<string>`date_trunc(${trunc}, ${delivery.createdAt})`,
+      period: sql<string>`date_trunc(${truncLit}, ${delivery.createdAt})`,
       total: count(),
       delivered: count(
         sql`CASE WHEN ${delivery.status} = 'delivered' THEN 1 END`,
@@ -230,8 +191,8 @@ router.get("/business/volume", async (req, res) => {
     })
     .from(delivery)
     .where(eq(delivery.businessId, session.user.id))
-    .groupBy(sql`date_trunc(${trunc}, ${delivery.createdAt})`)
-    .orderBy(sql`date_trunc(${trunc}, ${delivery.createdAt})`);
+    .groupBy(sql`date_trunc(${truncLit}, ${delivery.createdAt})`)
+    .orderBy(sql`date_trunc(${truncLit}, ${delivery.createdAt})`);
 
   return res.json(
     rows.map((r) => ({
@@ -243,11 +204,6 @@ router.get("/business/volume", async (req, res) => {
     })),
   );
 });
-
-// ---------------------------------------------------------------------------
-// GET /api/analytics/business/history
-// Paginated full delivery history for a business
-// ---------------------------------------------------------------------------
 router.get("/business/history", async (req, res) => {
   const session = (req as any).authSession;
   if (session.user.role !== "business") {
@@ -322,7 +278,6 @@ router.get("/driver/overview", async (req, res) => {
     totalEarnings: Number(totals.totalEarnings || 0).toFixed(2),
     avgDistanceKm: Number(totals.avgDistance || 0).toFixed(2),
     avgEstimatedMinutes: Number(totals.avgEstimatedMinutes || 0).toFixed(1),
-
     pendingOtpVerifications: Number(totals.otpIssued) || 0,
   });
 });
@@ -336,10 +291,11 @@ router.get("/driver/volume", async (req, res) => {
   const period = (req.query.period as string) || "daily";
   const trunc =
     period === "monthly" ? "month" : period === "weekly" ? "week" : "day";
+  const truncLit = sql.raw(`'${trunc}'`);
 
   const rows = await db
     .select({
-      period: sql<string>`date_trunc(${trunc}, ${delivery.createdAt})`,
+      period: sql<string>`date_trunc(${truncLit}, ${delivery.createdAt})`,
       total: count(),
       delivered: count(
         sql`CASE WHEN ${delivery.status} = 'delivered' THEN 1 END`,
@@ -350,8 +306,8 @@ router.get("/driver/volume", async (req, res) => {
     })
     .from(delivery)
     .where(eq(delivery.driverId, session.user.id))
-    .groupBy(sql`date_trunc(${trunc}, ${delivery.createdAt})`)
-    .orderBy(sql`date_trunc(${trunc}, ${delivery.createdAt})`);
+    .groupBy(sql`date_trunc(${truncLit}, ${delivery.createdAt})`)
+    .orderBy(sql`date_trunc(${truncLit}, ${delivery.createdAt})`);
 
   return res.json(
     rows.map((r) => ({
@@ -362,7 +318,6 @@ router.get("/driver/volume", async (req, res) => {
     })),
   );
 });
-
 router.get("/driver/history", async (req, res) => {
   const session = (req as any).authSession;
   if (session.user.role !== "driver") {
