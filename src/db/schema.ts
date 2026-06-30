@@ -108,6 +108,7 @@ export const accountRelations = relations(account, ({ one }) => ({
 }));
 
 export const deliveryStatusEnum = pgEnum("delivery_status", [
+  "awaiting_payment",
   "pending",
   "accepted",
   "picked_up",
@@ -175,7 +176,8 @@ export const delivery = pgTable("delivery", {
   distanceKm: doublePrecision("distance_km").notNull(),
   estimatedMinutes: doublePrecision("estimated_minutes").notNull(),
   price: numeric("price", { precision: 10, scale: 2 }).notNull(),
-  status: deliveryStatusEnum("status").default("pending").notNull(),
+  status: deliveryStatusEnum("status").default("awaiting_payment").notNull(),
+  paystackReference: text("paystack_reference"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
   otpHash: text("otp_hash"),

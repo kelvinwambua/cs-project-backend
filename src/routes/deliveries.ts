@@ -11,6 +11,13 @@ const router = express.Router();
 const BASE_FEE = 50;
 const PER_KM_RATE = 20;
 
+const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY!;
+const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5173";
+console.log(
+  "Using Paystack key:",
+  PAYSTACK_SECRET_KEY?.slice(0, 12),
+  PAYSTACK_SECRET_KEY?.length,
+);
 function asyncHandler<
   P extends Record<string, string> = Record<string, string>,
 >(fn: (req: express.Request<P>, res: express.Response) => Promise<any>) {
@@ -23,7 +30,6 @@ function asyncHandler<
     });
   };
 }
-
 
 function isValidCoord(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
@@ -72,7 +78,7 @@ function calculatePrice(distanceKm: number): number {
 }
 
 router.post(
-  "/",
+  "/initiate",
   asyncHandler(async (req, res) => {
     const session = (req as any).authSession;
     if (session.user.role !== "business") {
@@ -138,6 +144,8 @@ router.post(
     }
 
     const price = calculatePrice(distanceKm);
+    const deliveryId = nanoid();
+    const paystackReference = `dlv_${deliveryId}_${Date.now()}`;
 
     await db
       .insert(businessProfile)
@@ -170,40 +178,123 @@ router.post(
         },
       });
 
-    const newDelivery = await db
-      .insert(delivery)
-      .values({
-        id: nanoid(),
-        businessId: session.user.id,
-        recipientName,
-        recipientPhone,
-        pickupAddress,
-        pickupPlaceId,
-        pickupBuilding: pickupBuilding ?? null,
-        pickupNeighborhood: pickupNeighborhood ?? null,
-        pickupCity: pickupCity ?? null,
-        pickupLocationType: pickupLocationType ?? null,
-        pickupLocationNote: pickupLocationNote ?? null,
-        pickupLat,
-        pickupLng,
-        dropoffAddress,
-        dropoffPlaceId,
-        dropoffBuilding: dropoffBuilding ?? null,
-        dropoffNeighborhood: dropoffNeighborhood ?? null,
-        dropoffCity: dropoffCity ?? null,
-        dropoffLocationType: dropoffLocationType ?? null,
-        dropoffLocationNote: dropoffLocationNote ?? null,
-        dropoffLat,
-        dropoffLng,
-        notes: notes ?? null,
-        distanceKm,
-        estimatedMinutes: durationMinutes,
-        price: price.toFixed(2),
-        status: "pending",
-      })
+    await db.insert(delivery).values({
+      id: deliveryId,
+      businessId: session.user.id,
+      recipientName,
+      recipientPhone,
+      pickupAddress,
+      pickupPlaceId,
+      pickupBuilding: pickupBuilding ?? null,
+      pickupNeighborhood: pickupNeighborhood ?? null,
+      pickupCity: pickupCity ?? null,
+      pickupLocationType: pickupLocationType ?? null,
+      pickupLocationNote: pickupLocationNote ?? null,
+      pickupLat,
+      pickupLng,
+      dropoffAddress,
+      dropoffPlaceId,
+      dropoffBuilding: dropoffBuilding ?? null,
+      dropoffNeighborhood: dropoffNeighborhood ?? null,
+      dropoffCity: dropoffCity ?? null,
+      dropoffLocationType: dropoffLocationType ?? null,
+      dropoffLocationNote: dropoffLocationNote ?? null,
+      dropoffLat,
+      dropoffLng,
+      notes: notes ?? null,
+      distanceKm,
+      estimatedMinutes: durationMinutes,
+      price: price.toFixed(2),
+      status: "awaiting_payment",
+      paystackReference,
+    });
+
+    const paystackRes = await fetch(
+      "https://api.paystack.co/transaction/initialize",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${PAYSTACK_SECRET_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email: session.user.email,
+          amount: Math.round(price * 100),
+          currency: "KES",
+          reference: paystackReference,
+          callback_url: `${FRONTEND_URL}/business/requests/callback`,
+          metadata: {
+            deliveryId,
+            businessId: session.user.id,
+          },
+        }),
+      },
+    );
+
+    const paystackData = await paystackRes.json();
+
+    if (!paystackData.status || !paystackData.data?.authorization_url) {
+      console.error("Paystack init failed:", paystackData);
+      await db.delete(delivery).where(eq(delivery.id, deliveryId));
+      res.status(502).json({ error: "Could not initialize payment" });
+      return;
+    }
+
+    res.status(201).json({
+      deliveryId,
+      authorizationUrl: paystackData.data.authorization_url,
+    });
+  }),
+);
+
+router.get(
+  "/callback",
+  asyncHandler(async (req, res) => {
+    const { reference } = req.query;
+
+    if (!reference || typeof reference !== "string") {
+      res.redirect(`${FRONTEND_URL}/business/requests?payment=invalid`);
+      return;
+    }
+
+    const verifyRes = await fetch(
+      `https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`,
+      {
+        headers: {
+          Authorization: `Bearer ${PAYSTACK_SECRET_KEY}`,
+        },
+      },
+    );
+
+    const verifyData = await verifyRes.json();
+
+    if (!verifyData.status || verifyData.data?.status !== "success") {
+      console.error("Paystack verification failed:", verifyData);
+      res.redirect(`${FRONTEND_URL}/business/requests?payment=failed`);
+      return;
+    }
+
+    const [updated] = await db
+      .update(delivery)
+      .set({ status: "pending", updatedAt: new Date() })
+      .where(
+        and(
+          eq(delivery.paystackReference, reference),
+          eq(delivery.status, "awaiting_payment"),
+        ),
+      )
       .returning();
 
-    res.status(201).json(newDelivery[0]);
+    if (!updated) {
+      res.redirect(
+        `${FRONTEND_URL}/business/requests?payment=already_processed`,
+      );
+      return;
+    }
+
+    res.redirect(
+      `${FRONTEND_URL}/business/requests/${updated.id}?payment=success`,
+    );
   }),
 );
 
@@ -221,7 +312,6 @@ function generateOtp(): string {
 function hashOtp(otp: string): string {
   return crypto.createHash("sha256").update(otp).digest("hex");
 }
-
 
 function toE164(phone: string): string {
   const digits = phone.replace(/\D/g, "");
@@ -334,6 +424,32 @@ router.get(
     res.json(activeDelivery);
   }),
 );
+router.get(
+  "/business/history",
+  asyncHandler(async (req, res) => {
+    const session = (req as any).authSession;
+    if (session.user.role !== "business") {
+      res
+        .status(403)
+        .json({ error: "Only businesses can view delivery history" });
+      return;
+    }
+    const history = await db
+      .select()
+      .from(delivery)
+      .where(
+        and(
+          eq(delivery.businessId, session.user.id),
+          or(
+            eq(delivery.status, "delivered"),
+            eq(delivery.status, "cancelled"),
+          ),
+        ),
+      )
+      .orderBy(desc(delivery.updatedAt));
+    res.json(history);
+  }),
+);
 
 router.get(
   "/history",
@@ -359,7 +475,6 @@ router.get(
     res.json(history);
   }),
 );
-
 
 router.post(
   "/:id/otp",
@@ -426,7 +541,6 @@ router.post(
     });
   }),
 );
-
 
 router.post(
   "/:id/verify-otp",
@@ -509,7 +623,6 @@ router.get(
       res.status(403).json({ error: "Forbidden" });
       return;
     }
-  
     if (
       session.user.role === "driver" &&
       found.driverId !== session.user.id &&
@@ -531,13 +644,11 @@ router.patch(
 
     switch (action) {
       case "accept": {
-        
         if (session.user.role !== "driver") {
           res.status(403).json({ error: "Only drivers can accept deliveries" });
           return;
         }
 
-       
         const active = await db
           .select()
           .from(delivery)
@@ -605,7 +716,6 @@ router.patch(
       }
 
       case "deliver": {
-        
         res.status(400).json({
           error:
             "Deliveries must be marked delivered via OTP verification. Use /:id/otp then /:id/verify-otp.",
@@ -625,7 +735,10 @@ router.patch(
           .where(
             and(
               eq(delivery.id, id),
-              eq(delivery.status, "pending"),
+              or(
+                eq(delivery.status, "pending"),
+                eq(delivery.status, "awaiting_payment"),
+              ),
               eq(delivery.businessId, session.user.id),
             ),
           )
@@ -651,7 +764,6 @@ router.patch(
     const session = (req as any).authSession;
     const { id: deliveryId } = req.params;
     const { latitude, longitude } = req.body;
-
 
     if (session.user.role !== "driver") {
       res

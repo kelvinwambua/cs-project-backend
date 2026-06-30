@@ -15,6 +15,13 @@
       "when": 1782731589169,
       "tag": "0001_careful_sumo",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1782832047351,
+      "tag": "0002_old_loners",
+      "breakpoints": true
     }
   ]
 }
